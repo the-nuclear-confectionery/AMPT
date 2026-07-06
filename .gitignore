@@ -1,0 +1,9 @@
+# Compiled Fortran objects (regenerable via `make`)
+*.o
+
+# Compiled executable
+ampt
+
+# Run output written into ana/ (keep only the version marker)
+ana/*
+!ana/version
