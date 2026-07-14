@@ -22,6 +22,7 @@ c     initialization value for parton cascade:
       common /para7/ ioscar,nsmbbbar,nsmmeson
       common /para8/ idpert,npertd,idxsec
       common /rndm3/ iseedp
+      COMMON/LUDATR/MRLU(6),RRLU(100)
 c     initialization value for hadron cascade:
       COMMON /RUN/ NUM
       common/input1/ MASSPR,MASSTA,ISEED,IAVOID,DT
@@ -157,6 +158,16 @@ c      if(mod(NSEED,2).eq.0) NSEED=NSEED+1
       NSEED=2*NSEED+1
 c     9/26/03 random number generator for f77 compiler:
       CALL SRAND(NSEED)
+c     ---- per-process RNG decorrelation: seed all generators from NSEED ----
+c     fixes the one-event-per-process forward-eta bias; reseeds ZPC (ran1)
+c     and PYTHIA (RLU), which otherwise restart from fixed seeds every event,
+c     and switches HIJING/ART (RANART) to splitmix64. See
+c     AMPT_per_event_RNG_bias_findings.md.
+      CALL SEEDART(NSEED)
+      MRLU(1) = IHASH(NSEED, 12345)
+      MRLU(2) = 0
+      iseedp  = IHASH(NSEED, 67890)
+      if(iseedp.eq.0) iseedp = 1
 c
 c.....turn on warning messages in nohup.out when an event is repeated:
       IHPR2(10) = 1

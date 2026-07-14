@@ -5029,17 +5029,46 @@ c
 
 clin-10/01/03 random number generator for f77:
       function RANART(NSEED)
-      SAVE   
-clin-4/2008 ran(nseed) is renamed to avoid conflict with system functions:
-c      ran=rand()
-clin-12/2018 exclude the endpoints in order to avoid crash 
-c     due to numerical problems with zero branching ratio:
-c      ranart=rand(0)
- 10   ranart=rand(0)
+c     splitmix64 RNG (replaces gfortran rand(0)) so one-event-per-process
+c     runs are properly decorrelated; state seeded via SEEDART from NSEED.
+c     See AMPT_per_event_RNG_bias_findings.md.
+      SAVE
+      integer*8 istate, z, itmp8
+      common/rngart/ istate
+ 10   istate = istate + (-7046029254386353131_8)
+      z = istate
+      z = ieor(z, ishft(z,-30))
+      z = z * (-4658895280553007687_8)
+      z = ieor(z, ishft(z,-27))
+      z = z * (-7723592293110705685_8)
+      z = ieor(z, ishft(z,-31))
+      itmp8 = iand(ishft(z,-11), 9007199254740991_8)
+      ranart = real(dble(itmp8) / 9007199254740992.0d0)
       if(ranart.eq.0.or.ranart.eq.1.) goto 10
+      return
+      end
 c
-c     one may also use the following random number generator in PYTHIA/JETSET:
-c      ranart=rlu(0)
+      subroutine SEEDART(iseed)
+c     seed the splitmix64 state used by RANART
+      integer iseed
+      integer*8 istate
+      common/rngart/ istate
+      istate = int(iseed,8)
+      return
+      end
+c
+      integer function IHASH(iseed, isalt)
+c     splitmix64 mix of (iseed,isalt) -> 31-bit positive integer, used to
+c     derive independent per-process seeds for the ZPC and PYTHIA streams.
+      integer iseed, isalt
+      integer*8 z
+      z = int(iseed,8) + int(isalt,8)*(-7046029254386353131_8)
+      z = ieor(z, ishft(z,-30))
+      z = z * (-4658895280553007687_8)
+      z = ieor(z, ishft(z,-27))
+      z = z * (-7723592293110705685_8)
+      z = ieor(z, ishft(z,-31))
+      IHASH = int(iand(z, 2147483647_8))
       return
       end
 
