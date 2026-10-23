@@ -193,6 +193,9 @@ C	SUBROUTINE HIJING
 C
 C****************************************************************
         SUBROUTINE HIJING(FRAME,BMIN0,BMAX0)
+clin-thick:
+        common/thickn/ithick,Rpthk,Rtthk,gamp,gamt,betp,bett
+        common/thknuc/tHpro(300),zHpro(300),tHtar(300),zHtar(300)
 
 cbz1/25/99
         PARAMETER (MAXPTN=400001)
@@ -605,6 +608,9 @@ c   z_P_rest, z_T_rest: nuclear rest-frame z; divide by gamma for lab
            write(93,291) JP, JT, XC, YC, ZP, ZT
         ENDDO
  291    format(2(1x,I5),4(1x,f10.4))
+clin-thick: sample per-nucleon string production time/position for this event
+c     (finite nuclear thickness; Wang, Ma, Lin & Fu, arXiv:2102.06937).
+        if(ithick.eq.1) call thkini(BB,phiRP)
 
 clin-5/22/01 write impact parameter:
         bimp=bb
@@ -1420,8 +1426,17 @@ C       ****** identify the mother particle
      &                YT(1, IASG(ISG, 2)))
                    GYAR(NATT) = 0.5 * (YP(2, IASG(ISG, 1)) +
      &                YT(2, IASG(ISG, 2)))
-                   GZAR(NATT) = 0.
-                   FTAR(NATT) = 0.
+clin-thick: string spans one projectile and one target nucleon; take the
+c     midpoint of their production points, matching the transverse convention.
+                   if(ithick.eq.1) then
+                      GZAR(NATT) = 0.5*(zHpro(IASG(ISG,1))
+     &                     +zHtar(IASG(ISG,2)))
+                      FTAR(NATT) = 0.5*(tHpro(IASG(ISG,1))
+     &                     +tHtar(IASG(ISG,2)))
+                   else
+                      GZAR(NATT) = 0.
+                      FTAR(NATT) = 0.
+                   endif
                    ITYPAR(NATT) = K(I, 2)
                    PXAR(NATT) = P(I, 1)
                    PYAR(NATT) = P(I, 2)
@@ -1516,8 +1531,19 @@ c                      GYAR(NATT) = YT(2, jjtp)
                       GXAR(NATT) = YT(1, jjtp)-0.5*BB*cos(phiRP)
                       GYAR(NATT) = YT(2, jjtp)-0.5*BB*sin(phiRP)
                    END IF
-                   GZAR(NATT) = 0.
-                   FTAR(NATT) = 0.
+clin-thick:
+                   if(ithick.eq.1) then
+                      if(NTP.eq.1) then
+                         GZAR(NATT) = zHpro(jjtp)
+                         FTAR(NATT) = tHpro(jjtp)
+                      else
+                         GZAR(NATT) = zHtar(jjtp)
+                         FTAR(NATT) = tHtar(jjtp)
+                      endif
+                   else
+                      GZAR(NATT) = 0.
+                      FTAR(NATT) = 0.
+                   endif
                    ITYPAR(NATT) = K(I, 2)
                    PXAR(NATT) = P(I, 1)
                    PYAR(NATT) = P(I, 2)
@@ -2089,6 +2115,9 @@ C
 C
 C
         SUBROUTINE HIJSET(EFRM,FRAME,PROJ,TARG,IAP,IZP,IAT,IZT)
+clin-thick:
+        COMMON/WOOD/RWSTHK,DWSTHK,FNMTHK,WWSTHK
+        common/thickn/ithick,Rpthk,Rtthk,gamp,gamt,betp,bett
         CHARACTER FRAME*4,PROJ*4,TARG*4,EFRAME*4
         DOUBLE PRECISION  DD1,DD2,DD3,DD4
         COMMON/HSTRNG/NFP(300,15),PP(300,15),NFT(300,15),PT(300,15)
@@ -2307,16 +2336,46 @@ C                ********define Lorentz transform to lab frame
 c
 C                ********calculate the cross sections involved with
 C                        nucleon collisions.
+        Rpthk=0.
+        Rtthk=0.
         IF(IHNT2(1).GT.1) THEN
                 CALL HIJWDS(IHNT2(1),1,RMAX)
                 HIPR1(34)=RMAX
+clin-thick: Woods-Saxon radius parameter of the projectile (COMMON/WOOD/):
+                Rpthk=RWSTHK
 C                        ********set up Wood-Sax distr for proj.
         ENDIF
         IF(IHNT2(3).GT.1) THEN
                 CALL HIJWDS(IHNT2(3),2,RMAX)
                 HIPR1(35)=RMAX
+clin-thick: Woods-Saxon radius parameter of the target:
+                Rtthk=RWSTHK
 C                        ********set up Wood-Sax distr for  targ.
         ENDIF
+clin-thick: beam kinematics for the finite-thickness initialisation.
+c     HINT1(4) and HINT1(5) are the projectile and target rapidities that
+c     HIJING has already worked out for this FRAME, from the actual beam
+c     masses HINT1(8)/HINT1(9) -- use them rather than assuming a symmetric
+c     collision of 0.938 GeV nucleons.  In 'CMS' they are +-y_CM; in 'LAB'
+c     HINT1(5)=0 because the target is at rest, and the geometry below
+c     handles that case unchanged.
+        ypcm=abs(HINT1(4))
+        ytcm=abs(HINT1(5))
+        gamp=cosh(ypcm)
+        gamt=cosh(ytcm)
+        betp=tanh(ypcm)
+        bett=tanh(ytcm)
+        if(ithick.eq.1) then
+           if(Rpthk.le.0..or.Rtthk.le.0.) then
+              write(6,*) 'ithick: disabled, needs A>1 on both sides'
+              ithick=0
+           elseif((betp+bett).le.0.) then
+              write(6,*) 'ithick: disabled, beams are not moving'
+              ithick=0
+           elseif(FRAME.EQ.'LAB') then
+              write(6,*) 'ithick: LAB frame is NOT validated'
+           endif
+        endif
 C
 C
         I=0

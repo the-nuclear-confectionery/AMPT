@@ -46,6 +46,7 @@ A               ! TARG
 0 		! Flag to enable users to modify shadowing (D=0,no; 1,yes)
 1.d0		! Factor used to modify nuclear shadowing
 0		! Flag for random orientation of reaction plane (D=0,no; 1,yes)
+0		! ithick: finite nuclear thickness string init (D=0,no; 1,yes)
 
 %%%%%%%%%% Further explanations:
 BMAX:   the upper limit HIPR1(34)+HIPR1(35)=19.87fm (dAu), 25.60fm(AuAu).
@@ -142,3 +143,10 @@ dshadow: valid when ishadow=1; this parameter modifies the HIJING shadowing
 	and the value of 1.d0 uses the default HIJING shadowing;  
 	currently limited to 0.d0<=dshadow<=1.d0 to make sure Ra(x,r)>0.
 iphirp: set to 1 to turn on random orientation of reaction plane (D=0)
+ithick:	finite nuclear thickness in the string initialisation (string melting
+	only, ISOFT=3/4/5).  D=0 reproduces standard AMPT exactly (all strings
+	at t=0, z=0).  Set to 1 to produce each string at the time and
+	longitudinal position where its parent nucleons actually meet, spread
+	over the nuclear crossing time 2R_A/sinh(y_CM).  Matters for
+	sqrt(s_NN) <~ 50 GeV; negligible at 200 GeV.  See THICKNESS_NOTES.md.
+	This line may be omitted entirely; it then defaults to 0.

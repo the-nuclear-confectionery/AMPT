@@ -17,6 +17,8 @@ c
 c     parton coalescence radii in case of string melting:
       common /coal/dpcoal,drcoal,ecritl
       common/snn/efrm,npart1,npart2,epsiPz,epsiPt,PZPROJ,PZTARG
+clin-thick:
+      common/thickn/ithick,Rpthk,Rtthk,gamp,gamt,betp,bett
 c     initialization value for parton cascade:
       common /para2/ xmp, xmu, alpha, rscut2, cutof2
       common /para7/ ioscar,nsmbbbar,nsmmeson
@@ -115,6 +117,11 @@ clin-7/2009 Allow modification of nuclear shadowing:
       READ (24, *) ishadow
       READ (24, *) dshadow
       READ (24, *) iphirp
+clin-thick: finite nuclear thickness string init (0=off/standard, 1=on).
+c     Read last so that decks without this line still work.
+      ithick=0
+      READ (24, *, END=9118, ERR=9118) ithick
+ 9118 continue
 c
       CLOSE (24)
  111  format(a8)

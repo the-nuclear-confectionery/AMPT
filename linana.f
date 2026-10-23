@@ -346,6 +346,8 @@ c
 
 c=======================================================================
       SUBROUTINE HTOP
+clin-thick:
+      common/thickn/ithick,Rpthk,Rtthk,gamp,gamt,betp,bett
 c
       PARAMETER (MAXSTR=150001)
       PARAMETER (MAXPTN=400001)
@@ -597,10 +599,18 @@ c
                  pz0(npar)=ptwo(ipar,3)
                  e0(npar)=ptwo(ipar,4)
                  xmass0(npar)=ptwo(ipar,5)
-                 gx0(npar)=dble(GXAR(i))
-                 gy0(npar)=dble(GYAR(i))
-                 gz0(npar)=dble(GZAR(i))
-                 ft0(npar)=dble(ftime)
+clin-thick: the parent hadron is produced at (FTAR,GXAR,GYAR,GZAR) and the
+c     parton forms a time 'ftime' later, moving with the parent velocity.
+c     ZPC (zpc.f) advances every parton by vxp0*ft0 from gx0, so pre-subtract
+c     vxp0*FTAR here; the net displacement is then vxp0*ftime, as intended.
+c     With ithick=0, FTAR=0 and this reduces exactly to the original code.
+                 vxstr=patt(i,1)/patt(i,4)
+                 vystr=patt(i,2)/patt(i,4)
+                 vzstr=patt(i,3)/patt(i,4)
+                 gx0(npar)=dble(GXAR(i)-vxstr*FTAR(i))
+                 gy0(npar)=dble(GYAR(i)-vystr*FTAR(i))
+                 gz0(npar)=dble(GZAR(i)-vzstr*FTAR(i))
+                 ft0(npar)=dble(ftime+FTAR(i))
                  lstrg0(npar)=i
                  lpart0(npar)=ipar
                  vxp0(npar)=dble(patt(i,1)/patt(i,4))
@@ -635,10 +645,18 @@ c
                     pz0(npar)=ptwo(ipar,3)
                     e0(npar)=ptwo(ipar,4)
                     xmass0(npar)=ptwo(ipar,5)
-                    gx0(npar)=dble(GXAR(i))
-                    gy0(npar)=dble(GYAR(i))
-                    gz0(npar)=dble(GZAR(i))
-                    ft0(npar)=dble(ftime)
+clin-thick: the parent hadron is produced at (FTAR,GXAR,GYAR,GZAR) and the
+c     parton forms a time 'ftime' later, moving with the parent velocity.
+c     ZPC (zpc.f) advances every parton by vxp0*ft0 from gx0, so pre-subtract
+c     vxp0*FTAR here; the net displacement is then vxp0*ftime, as intended.
+c     With ithick=0, FTAR=0 and this reduces exactly to the original code.
+                    vxstr=patt(i,1)/patt(i,4)
+                    vystr=patt(i,2)/patt(i,4)
+                    vzstr=patt(i,3)/patt(i,4)
+                    gx0(npar)=dble(GXAR(i)-vxstr*FTAR(i))
+                    gy0(npar)=dble(GYAR(i)-vystr*FTAR(i))
+                    gz0(npar)=dble(GZAR(i)-vzstr*FTAR(i))
+                    ft0(npar)=dble(ftime+FTAR(i))
                     lstrg0(npar)=i
                     lpart0(npar)=ipar+1
                     vxp0(npar)=dble(patt(i,1)/patt(i,4))
@@ -3532,5 +3550,100 @@ c               write(99,*) "2  ",pxspi,pyspi,pzspi
       endif
 clin-8/2009-end
 c
+      return
+      end
+
+c-----------------------------------------------------------------------
+clin-thick: finite nuclear thickness string initialisation.
+c
+c     Implements the scheme of Wang, Ma, Lin & Fu, arXiv:2102.06937
+c     ("Thermodynamics of partonic matter ...", Sec. II):
+c       - t=0 is the moment the two nuclei touch;
+c       - a nucleon at transverse position r punches a rest-frame chord
+c            l = 2*sqrt(R_other^2 - r^2)
+c         through the other nucleus (their Eq. 2);
+c       - it enters the other nucleus at t_e and needs
+c            dt = l/(2*sinh y_CM)
+c         to cross it (their stated per-nucleon duration);
+c       - its parent hadrons are all produced at one time t_H sampled from
+c            dE_T/dt_H ~ [(t_H-t_e)(t_e+dt-t_H)]^n  on [t_e, t_e+dt], n=4,
+c         i.e. t_H = t_e + dt*Beta(n+1,n+1)   (their Eq. 4);
+c       - z_H follows the nucleon on a straight line (their Eq. 5).
+c
+c     t_e is derived here from the surface-contact geometry rather than
+c     copied from their Eq. (3): the printed form of that equation could not
+c     be reconciled with t=0 at contact (see THICKNESS_NOTES.md).  The
+c     derivation below reproduces BOTH durations the papers quote:
+c       per-nucleon   dt = l/(2 sinh y_CM)
+c       full crossing dt = 2 R_A/sinh y_CM  (b=0, on axis)
+c
+      subroutine thkini(BB,phiRP)
+      COMMON/hjcrdn/YP(3,300),YT(3,300)
+      COMMON/HPARNT/HIPR1(100),IHPR2(50),HINT1(100),IHNT2(50)
+      common/thickn/ithick,Rpthk,Rtthk,gamp,gamt,betp,bett
+      common/thknuc/tHpro(300),zHpro(300),tHtar(300),zHtar(300)
+      SAVE
+c
+      bx=BB*cos(phiRP)
+      by=BB*sin(phiRP)
+c
+c     Projectile nucleons: transverse offset measured from the TARGET centre.
+      do 100 i=1,IHNT2(1)
+         tHpro(i)=0.
+         zHpro(i)=0.
+         dx=YP(1,i)+bx
+         dy=YP(2,i)+by
+         r2=dx*dx+dy*dy
+c     A nucleon in the Woods-Saxon tail can sit outside the other nucleus'
+c     hard-sphere radius.  Let the chord go to zero there instead of
+c     falling back to t_H=0, so that t_H stays continuous across r=R.
+         if(r2.ge.Rtthk**2) then
+            chord=0.
+         else
+            chord=2.0*sqrt(Rtthk**2-r2)
+         endif
+         te=((Rtthk-0.5*chord)/gamt-(YP(3,i)-Rpthk)/gamp)/(betp+bett)
+         dtn=(chord/gamt)/(betp+bett)
+         th=te+dtn*betas()
+         tHpro(i)=th
+         zHpro(i)=(YP(3,i)-Rpthk)/gamp+betp*th
+ 100  continue
+c
+c     Target nucleons: transverse offset measured from the PROJECTILE centre.
+      do 200 i=1,IHNT2(3)
+         tHtar(i)=0.
+         zHtar(i)=0.
+         dx=YT(1,i)-bx
+         dy=YT(2,i)-by
+         r2=dx*dx+dy*dy
+c     A nucleon in the Woods-Saxon tail can sit outside the other nucleus'
+c     hard-sphere radius.  Let the chord go to zero there instead of
+c     falling back to t_H=0, so that t_H stays continuous across r=R.
+         if(r2.ge.Rpthk**2) then
+            chord=0.
+         else
+            chord=2.0*sqrt(Rpthk**2-r2)
+         endif
+         te=((Rtthk+YT(3,i))/gamt+(Rpthk-0.5*chord)/gamp)/(betp+bett)
+         dtn=(chord/gamp)/(betp+bett)
+         th=te+dtn*betas()
+         tHtar(i)=th
+         zHtar(i)=(Rtthk+YT(3,i))/gamt-bett*th
+ 200  continue
+      return
+      end
+c
+c     Beta(5,5) variate = G1/(G1+G2) with G1,G2 ~ Gamma(5,1); a Gamma(5,1) is
+c     the sum of five unit exponentials.  Exact, no rejection loop.
+      function betas()
+      COMMON/RNDF77/NSEED
+      SAVE
+      g1=0.
+      g2=0.
+      do 10 k=1,5
+         g1=g1-alog(max(RANART(NSEED),1.e-20))
+         g2=g2-alog(max(RANART(NSEED),1.e-20))
+ 10   continue
+      betas=g1/(g1+g2)
       return
       end
